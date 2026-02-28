@@ -8,7 +8,6 @@ Instant product sentiment analysis from live web reviews. Type a product name �
 - **Jinja2** — single-page HTML template
 - **Tavily** — live web search for product reviews
 - **OpenRouter** (`arcee-ai/trinity-large-preview:free`) — LLM analysis
-- **Celery** — background task worker
 - **Tailwind CSS + anime.js** — UI + animations (CDN)
 
 ## Agentic Workflow
@@ -54,10 +53,6 @@ Get keys:
 ```bash
 # Terminal 1 — web server
 make dev
-
-# Terminal 2 — Celery worker
-make celery
-```
 
 Open http://localhost:8000
 
