@@ -2,6 +2,8 @@
 
 Instant product sentiment analysis from live web reviews. Type a product name → get average rating, sentiment breakdown, and side-by-side pros/cons in seconds.
 
+<img width="767" height="958" alt="image" src="https://github.com/user-attachments/assets/2bd5b0df-7c2a-45d0-a8e8-95c41948537f" />
+
 ## Stack
 
 - **FastAPI** — backend + serves the UI
