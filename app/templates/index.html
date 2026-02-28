@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Toko Oren Sentiment Analyzer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            shopee: { DEFAULT: '#EE4D2D', light: '#FF6B4A', dark: '#C73E24' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .gradient-bg {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glass-light {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .pro-item, .con-item {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .pro-item:hover { background: rgba(34, 197, 94, 0.1); }
+    .con-item:hover { background: rgba(239, 68, 68, 0.1); }
+    .pro-item.active { background: rgba(34, 197, 94, 0.15); border-left: 3px solid #22c55e; }
+    .con-item.active { background: rgba(239, 68, 68, 0.15); border-left: 3px solid #ef4444; }
+    .snippet-box {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .snippet-box.visible { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .star { display: inline-block; }
+    .sentiment-bar { height: 100%; border-radius: 4px; width: 0%; transition: none; }
+    #search-input::placeholder { color: rgba(255,255,255,0.35); }
+    .skeleton { background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .confidence-high { color: #22c55e; border-color: #22c55e; }
+    .confidence-medium { color: #f59e0b; border-color: #f59e0b; }
+    .confidence-low { color: #6b7280; border-color: #6b7280; }
+    .pulse-btn { position: relative; overflow: hidden; }
+    .pulse-btn::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%); transform: scale(0); opacity: 0; transition: none; }
+    .pulse-btn:active::after { animation: ripple 0.4s ease; }
+    @keyframes ripple { to { transform: scale(2); opacity: 0; } }
+    #results-section { opacity: 0; }
+    .tag-chip {
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+
+  <!-- Privacy Banner -->
+  <div id="privacy-banner" class="w-full bg-amber-500/20 border-b border-amber-500/30 px-4 py-2.5 flex items-center justify-between">
+    <div class="flex items-center gap-2 text-amber-200 text-xs">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span><strong>Live mode</strong>: searches the web via Tavily + analyzes with Arcee. Respect ToS, rate-limit to ≤1 req/min, and cache results.</span>
+    </div>
+    <button onclick="dismissBanner()" class="text-amber-300 hover:text-white ml-4 flex-shrink-0 transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Main Layout -->
+  <div class="max-w-4xl mx-auto px-4 py-10">
+
+    <!-- Header -->
+    <div class="text-center mb-10">
+      <div class="flex items-center justify-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-xl bg-shopee flex items-center justify-center shadow-lg shadow-shopee/30">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+        </div>
+        <h1 class="text-3xl font-bold tracking-tight">Toko Oren Sentiment <span class="text-shopee">Analyzer</span></h1>
+      </div>
+      <p class="text-white/50 text-sm">Instant product insights from reviews — pros, cons, and sentiment at a glance</p>
+      <div class="flex items-center justify-center gap-2 mt-3">
+        {% if is_live %}
+          <span class="tag-chip bg-green-500/20 text-green-300 border border-green-500/40">LIVE MODE</span>
+        {% else %}
+          <span class="tag-chip bg-blue-500/20 text-blue-300 border border-blue-500/40">MOCK DATA</span>
+        {% endif %}
+        <span class="tag-chip bg-white/10 text-white/50 border border-white/20">{{ llm_mode }}</span>
+      </div>
+    </div>
+
+    <!-- Search Box -->
+    <div class="glass rounded-2xl p-6 mb-6">
+      <div class="flex gap-3">
+        <div class="flex-1 relative">
+          <div class="absolute left-4 top-1/2 -translate-y-1/2 text-white/30">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+          <input
+            id="search-input"
+            type="text"
+            placeholder="e.g. Samsung Galaxy S21, iPhone 13, Xiaomi Mi 11..."
+            class="w-full bg-white/10 text-white rounded-xl pl-11 pr-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-shopee/60 border border-white/10 focus:border-shopee/40 transition-all"
+            onkeydown="if(event.key==='Enter') triggerAnalyze()"
+          />
+        </div>
+        <button
+          onclick="triggerAnalyze()"
+          id="analyze-btn"
+          class="pulse-btn bg-shopee hover:bg-shopee-light active:bg-shopee-dark text-white font-semibold px-6 py-3.5 rounded-xl text-sm transition-colors shadow-lg shadow-shopee/25 flex items-center gap-2 whitespace-nowrap"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          Analyze
+        </button>
+      </div>
+
+      <!-- Suggestion chips -->
+      <div class="flex flex-wrap gap-2 mt-4">
+        <span class="text-white/30 text-xs self-center">Try:</span>
+        {% for name in ["Samsung Galaxy S21", "iPhone 13", "Realme GT", "Google Pixel 6", "Xiaomi Mi 11"] %}
+        <button
+          onclick="quickSearch('{{ name }}')"
+          class="text-xs bg-white/8 hover:bg-white/15 text-white/60 hover:text-white border border-white/10 rounded-lg px-3 py-1.5 transition-all"
+        >{{ name }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Skeleton Loader -->
+    <div id="skeleton-section" class="hidden">
+      <div class="glass rounded-2xl p-6 mb-4">
+        <div class="flex items-start gap-4 mb-6">
+          <div class="skeleton rounded-lg h-12 w-12 flex-shrink-0"></div>
+          <div class="flex-1">
+            <div class="skeleton rounded h-5 w-48 mb-2"></div>
+            <div class="skeleton rounded h-4 w-32"></div>
+          </div>
+        </div>
+        <div class="skeleton rounded-xl h-16 mb-4"></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <div class="skeleton rounded h-4 w-20 mb-3"></div>
+            <div class="skeleton rounded h-8 mb-2"></div>
+            <div class="skeleton rounded h-8 mb-2"></div>
+            <div class="skeleton rounded h-8"></div>
+          </div>
+          <div>
+            <div class="skeleton rounded h-4 w-20 mb-3"></div>
+            <div class="skeleton rounded h-8 mb-2"></div>
+            <div class="skeleton rounded h-8 mb-2"></div>
+            <div class="skeleton rounded h-8"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results-section" class="hidden">
+
+      <!-- Product Header Card -->
+      <div class="glass rounded-2xl p-6 mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-start gap-4 mb-5">
+          <div class="flex-1">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <h2 id="result-name" class="text-xl font-bold"></h2>
+              <span id="confidence-badge" class="tag-chip border text-xs"></span>
+              <span id="match-badge" class="tag-chip hidden bg-purple-500/20 text-purple-300 border border-purple-500/30">FUZZY MATCH</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <div id="stars-container" class="flex gap-0.5"></div>
+              <span id="avg-rating" class="font-semibold text-lg"></span>
+              <span id="review-count" class="text-white/40 text-sm"></span>
+            </div>
+          </div>
+          <a
+            id="shopee-btn"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="pulse-btn inline-flex items-center gap-2 bg-shopee hover:bg-shopee-light text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-colors shadow-lg shadow-shopee/25 whitespace-nowrap"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m1.6 8L6 5H3m4 8v6a1 1 0 001 1h8a1 1 0 001-1v-6M9 21h6"/>
+            </svg>
+            Buy on Toko Oren (ID)
+          </a>
+        </div>
+
+        <!-- Sentiment Distribution -->
+        <div class="mb-1">
+          <div class="flex justify-between text-xs text-white/40 mb-2">
+            <span>Sentiment Distribution</span>
+            <span id="sentiment-summary-text" class="text-white/60"></span>
+          </div>
+          <div class="flex gap-1 h-8 rounded-xl overflow-hidden">
+            <div id="pos-bar-wrap" class="h-full overflow-hidden rounded-l-xl" style="width:0%">
+              <div class="sentiment-bar bg-green-500 w-full h-full flex items-center justify-center">
+                <span id="pos-label" class="text-xs font-bold text-white hidden"></span>
+              </div>
+            </div>
+            <div id="neu-bar-wrap" class="h-full overflow-hidden" style="width:0%">
+              <div class="sentiment-bar bg-amber-400 w-full h-full flex items-center justify-center">
+                <span id="neu-label" class="text-xs font-bold text-white hidden"></span>
+              </div>
+            </div>
+            <div id="neg-bar-wrap" class="h-full overflow-hidden rounded-r-xl" style="width:0%">
+              <div class="sentiment-bar bg-red-500 w-full h-full flex items-center justify-center">
+                <span id="neg-label" class="text-xs font-bold text-white hidden"></span>
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-4 mt-2 text-xs text-white/40">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span><span id="pos-pct-text"></span> Positive</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span><span id="neu-pct-text"></span> Neutral</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span><span id="neg-pct-text"></span> Negative</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pros vs Cons Comparator (WOW moment) -->
+      <div class="grid grid-cols-2 gap-4 mb-4">
+
+        <!-- Pros -->
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center">
+              <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <h3 class="font-semibold text-green-400 text-sm">What People Love</h3>
+          </div>
+          <ul id="pros-list" class="space-y-2"></ul>
+        </div>
+
+        <!-- Cons -->
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-7 h-7 rounded-lg bg-red-500/20 flex items-center justify-center">
+              <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </div>
+            <h3 class="font-semibold text-red-400 text-sm">Common Complaints</h3>
+          </div>
+          <ul id="cons-list" class="space-y-2"></ul>
+        </div>
+      </div>
+
+      <!-- LLM Prompt Preview (collapsible) -->
+      <div class="glass rounded-2xl overflow-hidden mb-4">
+        <button
+          onclick="togglePrompt()"
+          class="w-full flex items-center justify-between px-5 py-3.5 text-white/50 hover:text-white/80 transition-colors text-sm"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+            </svg>
+            LLM Prompt Preview
+          </span>
+          <div class="flex items-center gap-2">
+            <span id="token-badge" class="hidden tag-chip bg-purple-500/20 text-purple-300 border border-purple-500/30"></span>
+            <svg id="prompt-chevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </button>
+        <div id="prompt-panel" class="hidden border-t border-white/10 px-5 py-4">
+          <p class="text-xs text-white/40 mb-2">This prompt is sent to the LLM for analysis:</p>
+          <pre id="prompt-text" class="text-xs text-green-300/80 bg-black/30 rounded-lg p-3 overflow-auto whitespace-pre-wrap font-mono leading-relaxed max-h-48"></pre>
+          <p class="text-xs text-white/30 mt-2">
+            To switch to LIVE mode: set <code class="bg-white/10 px-1 rounded">LLM_MODE=OPENAI</code> or <code class="bg-white/10 px-1 rounded">LLM_MODE=OPENROUTER</code> in your <code class="bg-white/10 px-1 rounded">.env</code> file.
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Error State -->
+    <div id="error-section" class="hidden glass rounded-2xl p-8 text-center">
+      <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3">
+        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <p id="error-text" class="text-white/60 text-sm"></p>
+      <p class="text-white/30 text-xs mt-2">Try refining your product name</p>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-white/20 text-xs mt-8">
+      <p>Powered by Arcee-optimized prompts · Demo uses mock reviews · Not affiliated with Toko Oren</p>
+    </div>
+  </div>
+
+<script>
+  // ---- Banner ----
+  (function() {
+    if (localStorage.getItem('banner_dismissed')) {
+      document.getElementById('privacy-banner').style.display = 'none';
+    }
+  })();
+  function dismissBanner() {
+    localStorage.setItem('banner_dismissed', '1');
+    anime({ targets: '#privacy-banner', height: [null, 0], opacity: [1, 0], duration: 300, easing: 'easeInQuart',
+      complete: () => document.getElementById('privacy-banner').style.display = 'none' });
+  }
+
+  // ---- State ----
+  let currentData = null;
+
+  // ---- Search ----
+  function quickSearch(name) {
+    document.getElementById('search-input').value = name;
+    triggerAnalyze();
+  }
+
+  async function triggerAnalyze() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) {
+      document.getElementById('search-input').focus();
+      anime({ targets: '#search-input', translateX: [0, -8, 8, -6, 6, 0], duration: 400, easing: 'easeInOutSine' });
+      return;
+    }
+
+    showState('loading');
+
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_name: query })
+      });
+
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const data = await res.json();
+      currentData = data;
+      renderResults(data);
+    } catch (err) {
+      showError(err.message || 'Something went wrong. Please try again.');
+    }
+  }
+
+  // ---- State management ----
+  function showState(state) {
+    document.getElementById('skeleton-section').classList.toggle('hidden', state !== 'loading');
+    const resultsEl = document.getElementById('results-section');
+    resultsEl.classList.toggle('hidden', state !== 'results');
+    if (state === 'results') resultsEl.style.opacity = 0;
+    document.getElementById('error-section').classList.toggle('hidden', state !== 'error');
+  }
+  function showError(msg) {
+    document.getElementById('error-text').textContent = msg;
+    showState('error');
+  }
+
+  // ---- Render ----
+  function renderResults(data) {
+    // Product name + badges
+    document.getElementById('result-name').textContent = data.product_name;
+
+    const confBadge = document.getElementById('confidence-badge');
+    confBadge.textContent = data.confidence + ' Confidence';
+    confBadge.className = `tag-chip border confidence-${data.confidence.toLowerCase()}`;
+
+    const matchBadge = document.getElementById('match-badge');
+    if (!data.matched) {
+      matchBadge.classList.remove('hidden');
+    } else {
+      matchBadge.classList.add('hidden');
+    }
+
+    // Rating
+    document.getElementById('avg-rating').textContent = Number(data.avg_rating).toFixed(1);
+    document.getElementById('review-count').textContent = `(${data.review_count} review${data.review_count !== 1 ? 's' : ''})`;
+
+    // Stars
+    renderStars(data.avg_rating);
+
+    // Shopee link
+    document.getElementById('shopee-btn').href = data.shopee_url;
+
+    // Sentiment percentages
+    document.getElementById('pos-pct-text').textContent = `${data.pos_pct}%`;
+    document.getElementById('neu-pct-text').textContent = `${data.neu_pct}%`;
+    document.getElementById('neg-pct-text').textContent = `${data.neg_pct}%`;
+    document.getElementById('sentiment-summary-text').textContent =
+      `${data.positive} pos / ${data.neutral} neu / ${data.negative} neg`;
+
+    // Pros
+    const prosList = document.getElementById('pros-list');
+    prosList.innerHTML = '';
+    (data.pros || []).forEach(pro => {
+      const snippet = (data.sample_snippets || {})[pro] || '';
+      prosList.appendChild(makeBullet(pro, snippet, 'pro'));
+    });
+
+    // Cons
+    const consList = document.getElementById('cons-list');
+    consList.innerHTML = '';
+    (data.cons || []).forEach(con => {
+      const snippet = (data.sample_snippets || {})[con] || '';
+      consList.appendChild(makeBullet(con, snippet, 'con'));
+    });
+
+    // Prompt preview
+    document.getElementById('prompt-text').textContent = data.prompt_preview || '';
+
+    // Token usage badge
+    const usage = data.token_usage || {};
+    const tokenBadge = document.getElementById('token-badge');
+    if (usage.input !== undefined) {
+      const total = (usage.input || 0) + (usage.output || 0);
+      tokenBadge.textContent = `${usage.input}↑ ${usage.output}↓ ${total} tokens`;
+      tokenBadge.classList.remove('hidden');
+    }
+
+    // Show results, then animate
+    showState('results');
+    requestAnimationFrame(() => animateIn(data));
+  }
+
+  function makeBullet(text, snippet, type) {
+    const li = document.createElement('li');
+    li.className = `${type}-item rounded-lg px-3 py-2 select-none`;
+    li.innerHTML = `
+      <div class="flex items-start gap-2">
+        <span class="${type === 'pro' ? 'text-green-400' : 'text-red-400'} mt-0.5 flex-shrink-0 text-xs">●</span>
+        <span class="text-sm text-white/80 leading-relaxed">${escapeHtml(text)}</span>
+      </div>
+      ${snippet ? `<div class="snippet-box mt-2 ml-4 text-xs text-white/50 bg-white/5 rounded-lg p-2 leading-relaxed italic border-l-2 ${type === 'pro' ? 'border-green-500/40' : 'border-red-500/40'}">"${escapeHtml(snippet)}"</div>` : ''}
+    `;
+    if (snippet) {
+      li.addEventListener('click', () => toggleBullet(li, type));
+    }
+    return li;
+  }
+
+  function toggleBullet(el, type) {
+    const wasActive = el.classList.contains('active');
+    // Deactivate all in same list
+    const list = el.closest('ul');
+    list.querySelectorAll('li').forEach(li => {
+      li.classList.remove('active');
+      const s = li.querySelector('.snippet-box');
+      if (s) s.classList.remove('visible');
+    });
+    if (!wasActive) {
+      el.classList.add('active');
+      const snippet = el.querySelector('.snippet-box');
+      if (snippet) snippet.classList.add('visible');
+      anime({ targets: el, scale: [1, 1.02, 1], duration: 250, easing: 'easeOutBack' });
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderStars(rating) {
+    const container = document.getElementById('stars-container');
+    container.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+      const s = document.createElement('span');
+      s.className = 'star text-lg leading-none';
+      if (i <= Math.floor(rating)) {
+        s.textContent = '★';
+        s.style.color = '#f59e0b';
+      } else if (i === Math.ceil(rating) && rating % 1 >= 0.3) {
+        s.textContent = '½';
+        s.style.color = '#f59e0b';
+        s.style.fontSize = '0.9em';
+      } else {
+        s.textContent = '★';
+        s.style.color = 'rgba(255,255,255,0.15)';
+      }
+      container.appendChild(s);
+    }
+  }
+
+  // ---- Animations ----
+  function animateIn(data) {
+    const resultsEl = document.getElementById('results-section');
+
+    // Fade in whole section
+    anime({ targets: resultsEl, opacity: [0, 1], duration: 400, easing: 'easeOutQuart' });
+
+    // Stars scale-in
+    anime({
+      targets: '.star',
+      scale: [0, 1],
+      opacity: [0, 1],
+      delay: anime.stagger(60, { start: 200 }),
+      easing: 'spring(1, 80, 12, 0)',
+    });
+
+    // Sentiment bars animate width
+    setTimeout(() => {
+      anime({
+        targets: '#pos-bar-wrap',
+        width: [`0%`, `${data.pos_pct}%`],
+        duration: 900,
+        easing: 'easeOutExpo',
+      });
+      anime({
+        targets: '#neu-bar-wrap',
+        width: [`0%`, `${data.neu_pct}%`],
+        duration: 900,
+        delay: 100,
+        easing: 'easeOutExpo',
+      });
+      anime({
+        targets: '#neg-bar-wrap',
+        width: [`0%`, `${data.neg_pct}%`],
+        duration: 900,
+        delay: 200,
+        easing: 'easeOutExpo',
+        complete: () => {
+          // Show labels if bar is wide enough
+          if (data.pos_pct > 12) document.getElementById('pos-label').classList.remove('hidden');
+          if (data.neu_pct > 12) document.getElementById('neu-label').classList.remove('hidden');
+          if (data.neg_pct > 12) document.getElementById('neg-label').classList.remove('hidden');
+        }
+      });
+    }, 300);
+
+    // Pros slide in from left
+    anime({
+      targets: '#pros-list .pro-item',
+      translateX: [-50, 0],
+      opacity: [0, 1],
+      delay: anime.stagger(90, { start: 500 }),
+      easing: 'easeOutQuart',
+      duration: 500,
+    });
+
+    // Cons slide in from right
+    anime({
+      targets: '#cons-list .con-item',
+      translateX: [50, 0],
+      opacity: [0, 1],
+      delay: anime.stagger(90, { start: 500 }),
+      easing: 'easeOutQuart',
+      duration: 500,
+    });
+
+    // Rating counter animation
+    const ratingEl = document.getElementById('avg-rating');
+    anime({
+      targets: { val: 0 },
+      val: data.avg_rating,
+      duration: 800,
+      delay: 400,
+      easing: 'easeOutExpo',
+      update: (anim) => {
+        ratingEl.textContent = anim.animations[0].currentValue.toFixed(1);
+      },
+    });
+  }
+
+  // ---- Prompt Toggle ----
+  function togglePrompt() {
+    const panel = document.getElementById('prompt-panel');
+    const chevron = document.getElementById('prompt-chevron');
+    const isHidden = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !isHidden);
+    chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+    if (isHidden) {
+      anime({ targets: panel, opacity: [0, 1], duration: 200, easing: 'easeOutQuart' });
+    }
+  }
+</script>
+</body>
+</html>
